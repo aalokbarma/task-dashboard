@@ -7,6 +7,9 @@
       <button @click="showCategoryForm = true" class="add-category-btn">Create Category</button>
     </div>
 
+    <!-- Task Filter Component -->
+    <TaskFilter @filter="handleFilter" />
+
     <!-- No Categories Popup -->
     <div v-if="showNoCategoriesPopup" class="modal-overlay">
       <div class="modal-content">
@@ -38,8 +41,8 @@
     </div>
 
     <!-- No tasks message if no tasks exist in any category -->
-    <div v-if="tasks.length === 0" class="no-tasks-message">
-      <p>Currently there are no tasks. Kindly create one to see in the dashboard.</p>
+    <div v-if="filteredTasks?.length === 0" class="no-tasks-message">
+      <p>Currently, there are no tasks matching the criteria.</p>
     </div>
 
     <!-- Tasks Organized by Category -->
@@ -132,12 +135,14 @@
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import TaskItem from './TaskItem.vue';
+import TaskFilter from './TaskFilter.vue';
 
 export default {
   components: {
-    TaskItem
+    TaskItem,
+    TaskFilter
   },
   setup() {
     const tasks = ref([]);
@@ -159,6 +164,7 @@ export default {
       category: ''
     });
     const taskToDelete = ref(null);
+    const filterCriteria = ref({ status: '', query: '' });
 
     const openTaskForm = () => {
       if (categories.value.length === 0) {
@@ -191,10 +197,6 @@ export default {
       }
     };
 
-    const tasksByCategory = (category) => {
-      return tasks.value.filter(task => task.category === category);
-    };
-
     const handleEditTask = (task) => {
       isEditMode.value = true;
       showTaskForm.value = true;
@@ -218,6 +220,27 @@ export default {
       isEditMode.value = false;
     };
 
+    const handleFilter = (criteria) => {
+      filterCriteria.value = criteria;
+    };
+
+    const filteredTasks = computed(() => {
+      return tasks.value.filter((task) => {
+        const matchesStatus =
+          !filterCriteria.value.status ||
+          task.status === filterCriteria.value.status;
+        const matchesQuery =
+          !filterCriteria.value.query ||
+          task.name.toLowerCase().includes(filterCriteria.value.query.toLowerCase()) ||
+          task.id.toLowerCase().includes(filterCriteria.value.query.toLowerCase());
+        return matchesStatus && matchesQuery;
+      });
+    });
+
+    const tasksByCategory = (category) => {
+      return filteredTasks.value.filter((task) => task.category === category);
+    };
+
     return {
       tasks,
       categories,
@@ -235,7 +258,8 @@ export default {
       tasksByCategory,
       handleEditTask,
       triggerDeleteConfirmPopup,
-      confirmDeleteTask
+      confirmDeleteTask,
+      handleFilter,
     };
   },
 };
