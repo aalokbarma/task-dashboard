@@ -1,36 +1,74 @@
 <template>
   <div class="dashboard-container">
-    <!-- Add Task Button -->
+    <!-- Dashboard Header with Add Task and Create Category Buttons -->
     <div class="dashboard-header">
       <h1>Task Dashboard</h1>
-      <button @click="showTaskForm = true" class="add-task-btn">Add Task</button>
-      <button @click="createCategory" class="add-category-btn">Create Category</button>
+      <button @click="openTaskForm" class="add-task-btn">Add Task</button>
+      <button @click="showCategoryForm = true" class="add-category-btn">Create Category</button>
     </div>
 
-    <!-- No tasks message -->
+    <!-- No Categories Popup -->
+    <div v-if="showNoCategoriesPopup" class="modal-overlay">
+      <div class="modal-content">
+        <h2>No Categories Available</h2>
+        <p>Currently, there are no categories. Kindly create a category first to create a task.</p>
+        <button @click="showNoCategoriesPopup = false" class="close-btn">Close</button>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Popup -->
+    <div v-if="showDeleteConfirmPopup" class="modal-overlay">
+      <div class="modal-content">
+        <h2>Confirm Deletion</h2>
+        <p>Are you sure you want to delete this task?</p>
+        <div class="form-actions">
+          <button @click="confirmDeleteTask" class="delete-btn">Delete</button>
+          <button @click="showDeleteConfirmPopup = false" class="cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success Message Popup -->
+    <div v-if="showSuccessPopup" class="modal-overlay">
+      <div class="modal-content">
+        <h2>Success</h2>
+        <p>Your task has been deleted successfully.</p>
+        <button @click="showSuccessPopup = false" class="close-btn">OK</button>
+      </div>
+    </div>
+
+    <!-- No tasks message if no tasks exist in any category -->
     <div v-if="tasks.length === 0" class="no-tasks-message">
       <p>Currently there are no tasks. Kindly create one to see in the dashboard.</p>
     </div>
 
-    <!-- Tasks List -->
-    <div v-else class="tasks-list">
-      <TaskItem
-        v-for="task in tasks"
-        :key="task.id"
-        :task="task"
-        @edit="handleEditTask"
-        @delete="handleDeleteTask"
-      />
+    <!-- Tasks Organized by Category -->
+    <div v-else class="tasks-by-category">
+      <div v-for="category in categories" :key="category" class="category-section">
+        <h2>{{ category }}</h2>
+        <div v-if="tasksByCategory(category).length === 0" class="no-tasks-in-category">
+          <p>No tasks available in this category.</p>
+        </div>
+        <div class="tasks-list">
+          <TaskItem
+            v-for="task in tasksByCategory(category)"
+            :key="task.id"
+            :task="task"
+            @edit="handleEditTask"
+            @delete="triggerDeleteConfirmPopup(task)"
+          />
+        </div>
+      </div>
     </div>
 
     <!-- Task Form Popup -->
     <div v-if="showTaskForm" class="modal-overlay">
-      <div class="modal-content">
+      <div class="modal-content form-content">
         <h2>{{ isEditMode ? 'Edit Task' : 'Create Task' }}</h2>
         <form @submit.prevent="submitTask">
           <div class="form-group">
             <label for="task-id">Task ID</label>
-            <input id="task-id" v-model="newTask.id" type="text" required />
+            <input id="task-id" v-model="newTask.id" type="text" :disabled="isEditMode" required />
           </div>
           <div class="form-group">
             <label for="task-name">Name</label>
@@ -60,9 +98,32 @@
               <option value="Done">Done</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="category">Category</label>
+            <select id="category" v-model="newTask.category" required>
+              <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
+            </select>
+          </div>
           <div class="form-actions">
             <button type="submit" class="submit-btn">{{ isEditMode ? 'Update' : 'Submit' }}</button>
             <button type="button" @click="showTaskForm = false" class="cancel-btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create Category Popup -->
+    <div v-if="showCategoryForm" class="modal-overlay">
+      <div class="modal-content form-content">
+        <h2>Create Category</h2>
+        <form @submit.prevent="addCategory">
+          <div class="form-group">
+            <label for="category-name">Category Name</label>
+            <input id="category-name" v-model="newCategory" type="text" required />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="submit-btn">Add Category</button>
+            <button type="button" @click="showCategoryForm = false" class="cancel-btn">Cancel</button>
           </div>
         </form>
       </div>
@@ -80,8 +141,14 @@ export default {
   },
   setup() {
     const tasks = ref([]);
+    const categories = ref([]);
     const showTaskForm = ref(false);
+    const showCategoryForm = ref(false);
+    const showNoCategoriesPopup = ref(false);
+    const showDeleteConfirmPopup = ref(false);
+    const showSuccessPopup = ref(false);
     const isEditMode = ref(false);
+    const newCategory = ref('');
     const newTask = ref({
       id: '',
       name: '',
@@ -89,57 +156,91 @@ export default {
       dueDate: '',
       priority: 'Low',
       status: 'To-do',
+      category: ''
     });
+    const taskToDelete = ref(null);
+
+    const openTaskForm = () => {
+      if (categories.value.length === 0) {
+        showNoCategoriesPopup.value = true;
+      } else {
+        showTaskForm.value = true;
+      }
+    };
 
     const submitTask = () => {
       if (isEditMode.value) {
-        // Update task if edit mode
         const index = tasks.value.findIndex(task => task.id === newTask.value.id);
         if (index !== -1) {
           tasks.value.splice(index, 1, { ...newTask.value });
         }
       } else {
-        // Add new task
         tasks.value.push({ ...newTask.value });
       }
       showTaskForm.value = false;
       resetForm();
     };
 
+    const addCategory = () => {
+      if (!categories.value.includes(newCategory.value)) {
+        categories.value.push(newCategory.value);
+        newCategory.value = '';
+        showCategoryForm.value = false;
+      } else {
+        alert('Category already exists.');
+      }
+    };
+
+    const tasksByCategory = (category) => {
+      return tasks.value.filter(task => task.category === category);
+    };
+
     const handleEditTask = (task) => {
-      // Enter edit mode
       isEditMode.value = true;
       showTaskForm.value = true;
       newTask.value = { ...task };
     };
 
-    const handleDeleteTask = (task) => {
-      // Delete task
-      tasks.value = tasks.value.filter(t => t.id !== task.id);
+    const triggerDeleteConfirmPopup = (task) => {
+      taskToDelete.value = task;
+      showDeleteConfirmPopup.value = true;
+    };
+
+    const confirmDeleteTask = () => {
+      tasks.value = tasks.value.filter(t => t.id !== taskToDelete.value.id);
+      showDeleteConfirmPopup.value = false;
+      showSuccessPopup.value = true;
+      taskToDelete.value = null;
     };
 
     const resetForm = () => {
-      newTask.value = { id: '', name: '', description: '', dueDate: '', priority: 'Low', status: 'To-do' };
+      newTask.value = { id: '', name: '', description: '', dueDate: '', priority: 'Low', status: 'To-do', category: '' };
       isEditMode.value = false;
-    };
-
-    const createCategory = () => {
-      alert("Create category functionality can be implemented here.");
     };
 
     return {
       tasks,
+      categories,
       showTaskForm,
+      showCategoryForm,
+      showNoCategoriesPopup,
+      showDeleteConfirmPopup,
+      showSuccessPopup,
       newTask,
+      newCategory,
       isEditMode,
       submitTask,
+      addCategory,
+      openTaskForm,
+      tasksByCategory,
       handleEditTask,
-      handleDeleteTask,
-      createCategory,
+      triggerDeleteConfirmPopup,
+      confirmDeleteTask
     };
   },
 };
 </script>
+
 <style scoped>
 /* General Styles */
 .dashboard-container {
@@ -168,34 +269,12 @@ export default {
   color: white;
 }
 
-.add-task-btn:hover {
-  background-color: #3a9f75;
-}
-
 .add-category-btn {
   background-color: #ff9800;
   color: white;
 }
 
-.add-category-btn:hover {
-  background-color: #e68900;
-}
-
-/* No tasks message */
-.no-tasks-message {
-  text-align: center;
-  font-size: 18px;
-  color: #666;
-}
-
-/* Tasks List */
-.tasks-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-/* Modal Styles */
+/* Modal and Form Styling */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -206,20 +285,18 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 10;
 }
 
 .modal-content {
   background-color: white;
   padding: 20px;
   border-radius: 8px;
-  width: 400px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
-h2 {
-  margin-bottom: 20px;
-}
-
-/* Form Styles */
 .form-group {
   margin-bottom: 15px;
 }
@@ -238,7 +315,7 @@ input, textarea, select {
 }
 
 textarea {
-  height: 100px;
+  height: 80px;
 }
 
 .form-actions {
@@ -246,7 +323,7 @@ textarea {
   justify-content: space-between;
 }
 
-.submit-btn, .cancel-btn {
+.submit-btn, .cancel-btn, .close-btn, .delete-btn {
   padding: 10px 20px;
   border: none;
   border-radius: 5px;
@@ -259,27 +336,40 @@ textarea {
   color: white;
 }
 
-.submit-btn:hover {
-  background-color: #3a9f75;
-}
-
-.cancel-btn {
+.cancel-btn, .close-btn {
   background-color: #ff5252;
   color: white;
 }
 
-.cancel-btn:hover {
-  background-color: #e54848;
+.delete-btn {
+  background-color: #e74c3c;
+  color: white;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .tasks-list {
-    grid-template-columns: 1fr;
-  }
+/* Category Sections */
+.tasks-by-category {
+  margin-top: 20px;
+}
 
-  .modal-content {
-    width: 90%;
-  }
+.category-section {
+  margin-bottom: 20px;
+}
+
+.category-section h2 {
+  font-size: 20px;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.tasks-list {
+  display: flex;
+  overflow-x: auto;
+  gap: 15px;
+  padding-bottom: 10px;
+}
+
+.task-item {
+  min-width: 250px;
+  flex-shrink: 0;
 }
 </style>
