@@ -1,4 +1,6 @@
 <template>
+<div v-if="isLoading">Loading...</div>
+  <div v-else class="dashboard-container">
   <div class="dashboard-container">
     <!-- Dashboard Header with Add Task and Create Category Buttons -->
     <div class="dashboard-header">
@@ -132,21 +134,26 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, where } from 'firebase/firestore';
+import { db, auth, provider, signInWithPopup } from '../Services/firebase';
 import TaskItem from './TaskItem.vue';
 import TaskFilter from './TaskFilter.vue';
 
 export default {
   components: {
     TaskItem,
-    TaskFilter
+    TaskFilter,
   },
   setup() {
     const tasks = ref([]);
     const categories = ref([]);
+    const user = ref(null);
+    const isLoading = ref(true);
     const showTaskForm = ref(false);
     const showCategoryForm = ref(false);
     const showNoCategoriesPopup = ref(false);
@@ -161,10 +168,57 @@ export default {
       dueDate: '',
       priority: 'Low',
       status: 'To-do',
-      category: ''
+      category: '',
+      userId: '' 
     });
     const taskToDelete = ref(null);
     const filterCriteria = ref({ status: '', query: '' });
+
+    const loginUser = async () => {
+      try {
+        const result = await signInWithPopup(auth, provider);
+        user.value = result.user;
+        fetchTasks();
+      } catch (error) {
+        console.error("Error logging in:", error);
+      } finally {
+        isLoading.value = false;
+      }
+    };
+
+    const fetchTasks = async () => {
+      if (!user.value) return;
+
+      const q = query(collection(db, 'tasks'), where('userId', '==', user.value.uid));
+      const querySnapshot = await getDocs(q);
+      tasks.value = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    };
+
+    const addTaskToFirestore = async () => {
+      await addDoc(collection(db, 'tasks'), { ...newTask.value, userId: user.value.uid });
+      fetchTasks();
+    };
+
+    const updateTaskInFirestore = async () => {
+      const taskDoc = doc(db, 'tasks', newTask.value.id);
+      await updateDoc(taskDoc, { ...newTask.value });
+      fetchTasks();
+    };
+
+    const deleteTaskFromFirestore = async (taskId) => {
+      const taskDoc = doc(db, 'tasks', taskId);
+      await deleteDoc(taskDoc);
+      fetchTasks();
+    };
+
+    onMounted(() => {
+      if (!user.value) {
+        loginUser();
+      } else {
+        fetchTasks();
+        isLoading.value = false;
+      }
+    });
 
     const openTaskForm = () => {
       if (categories.value.length === 0) {
@@ -176,12 +230,9 @@ export default {
 
     const submitTask = () => {
       if (isEditMode.value) {
-        const index = tasks.value.findIndex(task => task.id === newTask.value.id);
-        if (index !== -1) {
-          tasks.value.splice(index, 1, { ...newTask.value });
-        }
+        updateTaskInFirestore();
       } else {
-        tasks.value.push({ ...newTask.value });
+        addTaskToFirestore();
       }
       showTaskForm.value = false;
       resetForm();
@@ -209,14 +260,14 @@ export default {
     };
 
     const confirmDeleteTask = () => {
-      tasks.value = tasks.value.filter(t => t.id !== taskToDelete.value.id);
+      deleteTaskFromFirestore(taskToDelete.value.id);
       showDeleteConfirmPopup.value = false;
       showSuccessPopup.value = true;
       taskToDelete.value = null;
     };
 
     const resetForm = () => {
-      newTask.value = { id: '', name: '', description: '', dueDate: '', priority: 'Low', status: 'To-do', category: '' };
+      newTask.value = { id: '', name: '', description: '', dueDate: '', priority: 'Low', status: 'To-do', category: '', userId: user.value ? user.value.uid : '' };
       isEditMode.value = false;
     };
 
@@ -226,13 +277,8 @@ export default {
 
     const filteredTasks = computed(() => {
       return tasks.value.filter((task) => {
-        const matchesStatus =
-          !filterCriteria.value.status ||
-          task.status === filterCriteria.value.status;
-        const matchesQuery =
-          !filterCriteria.value.query ||
-          task.name.toLowerCase().includes(filterCriteria.value.query.toLowerCase()) ||
-          task.id.toLowerCase().includes(filterCriteria.value.query.toLowerCase());
+        const matchesStatus = !filterCriteria.value.status || task.status === filterCriteria.value.status;
+        const matchesQuery = !filterCriteria.value.query || task.name.toLowerCase().includes(filterCriteria.value.query.toLowerCase()) || task.id.toLowerCase().includes(filterCriteria.value.query.toLowerCase());
         return matchesStatus && matchesQuery;
       });
     });
@@ -244,6 +290,9 @@ export default {
     return {
       tasks,
       categories,
+      user,
+      loginUser,
+      isLoading,
       showTaskForm,
       showCategoryForm,
       showNoCategoriesPopup,
