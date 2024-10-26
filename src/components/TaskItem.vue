@@ -2,7 +2,7 @@
   <div class="task-item">
     <!-- Task Info -->
     <h3>{{ task.name }}</h3>
-    <p><strong>ID:</strong> {{ task.id }}</p>
+    <p><strong>ID:</strong> {{ task.taskId }}</p>
     <p><strong>Description:</strong> {{ task.description }}</p>
     <p><strong>Due Date:</strong> {{ task.dueDate }}</p>
     <p><strong>Priority:</strong> {{ task.priority }}</p>

@@ -1,17 +1,16 @@
 <template>
-<div v-if="isLoading">Loading...</div>
+  <div v-if="isLoading">Loading...</div>
   <div v-else class="dashboard-container">
-  <div class="dashboard-container">
-    <!-- Dashboard Header with Add Task and Create Category Buttons -->
+    <!-- Header with Add Task and Create Category Buttons -->
     <div class="dashboard-header">
       <h1>Task Dashboard</h1>
       <button @click="openTaskForm" class="add-task-btn">Add Task</button>
       <button @click="showCategoryForm = true" class="add-category-btn">Create Category</button>
     </div>
-
+  
     <!-- Task Filter Component -->
     <TaskFilter @filter="handleFilter" />
-
+  
     <!-- No Categories Popup -->
     <div v-if="showNoCategoriesPopup" class="modal-overlay">
       <div class="modal-content">
@@ -20,7 +19,7 @@
         <button @click="showNoCategoriesPopup = false" class="close-btn">Close</button>
       </div>
     </div>
-
+  
     <!-- Delete Confirmation Popup -->
     <div v-if="showDeleteConfirmPopup" class="modal-overlay">
       <div class="modal-content">
@@ -32,7 +31,7 @@
         </div>
       </div>
     </div>
-
+  
     <!-- Success Message Popup -->
     <div v-if="showSuccessPopup" class="modal-overlay">
       <div class="modal-content">
@@ -41,31 +40,26 @@
         <button @click="showSuccessPopup = false" class="close-btn">OK</button>
       </div>
     </div>
-
+  
     <!-- No tasks message if no tasks exist in any category -->
     <div v-if="filteredTasks?.length === 0" class="no-tasks-message">
       <p>Currently, there are no tasks matching the criteria.</p>
     </div>
-
+  
     <!-- Tasks Organized by Category -->
     <div v-else class="tasks-by-category">
-      <div v-for="category in categories" :key="category" class="category-section">
-        <h2>{{ category }}</h2>
-        <div v-if="tasksByCategory(category).length === 0" class="no-tasks-in-category">
+      <div v-for="category in categories" :key="category.id" class="category-section">
+        <h2>{{ category.name }}</h2>
+        <div v-if="tasksByCategory(category.name).length === 0" class="no-tasks-in-category">
           <p>No tasks available in this category.</p>
         </div>
         <div class="tasks-list">
-          <TaskItem
-            v-for="task in tasksByCategory(category)"
-            :key="task.id"
-            :task="task"
-            @edit="handleEditTask"
-            @delete="triggerDeleteConfirmPopup(task)"
-          />
+          <TaskItem v-for="task in tasksByCategory(category.name)" :key="task.id" :task="task" @edit="handleEditTask"
+            @delete="triggerDeleteConfirmPopup(task)" />
         </div>
       </div>
     </div>
-
+  
     <!-- Task Form Popup -->
     <div v-if="showTaskForm" class="modal-overlay">
       <div class="modal-content form-content">
@@ -73,7 +67,8 @@
         <form @submit.prevent="submitTask">
           <div class="form-group">
             <label for="task-id">Task ID</label>
-            <input id="task-id" v-model="newTask.id" type="text" :disabled="isEditMode" required />
+            <input id="task-id" v-model.number="newTask.taskId" type="number" :disabled="isEditMode" required
+              class="no-arrows" />
           </div>
           <div class="form-group">
             <label for="task-name">Name</label>
@@ -106,7 +101,8 @@
           <div class="form-group">
             <label for="category">Category</label>
             <select id="category" v-model="newTask.category" required>
-              <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
+              <option v-for="category in categories" :key="category.id" :value="category.name">{{ category.name }}
+              </option>
             </select>
           </div>
           <div class="form-actions">
@@ -116,7 +112,7 @@
         </form>
       </div>
     </div>
-
+  
     <!-- Create Category Popup -->
     <div v-if="showCategoryForm" class="modal-overlay">
       <div class="modal-content form-content">
@@ -134,12 +130,11 @@
       </div>
     </div>
   </div>
-  </div>
 </template>
 
 <script>
 import { ref, computed, onMounted } from 'vue';
-import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, where, setDoc } from 'firebase/firestore';
 import { db, auth, provider, signInWithPopup } from '../Services/firebase';
 import TaskItem from './TaskItem.vue';
 import TaskFilter from './TaskFilter.vue';
@@ -169,16 +164,18 @@ export default {
       priority: 'Low',
       status: 'To-do',
       category: '',
-      userId: '' 
+      userId: '',
+      taskId: '',
     });
     const taskToDelete = ref(null);
     const filterCriteria = ref({ status: '', query: '' });
 
+    // Log in the user using Google Auth
     const loginUser = async () => {
       try {
         const result = await signInWithPopup(auth, provider);
         user.value = result.user;
-        fetchTasks();
+        fetchCategoriesAndTasks();
       } catch (error) {
         console.error("Error logging in:", error);
       } finally {
@@ -186,36 +183,99 @@ export default {
       }
     };
 
-    const fetchTasks = async () => {
+    // Fetch categories and tasks for the logged-in user
+    const fetchCategoriesAndTasks = async () => {
       if (!user.value) return;
 
-      const q = query(collection(db, 'tasks'), where('userId', '==', user.value.uid));
-      const querySnapshot = await getDocs(q);
-      tasks.value = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Fetch categories for the logged-in user
+      const categoryQuery = query(collection(db, 'categories'), where('userId', '==', user.value.uid));
+      const categorySnapshot = await getDocs(categoryQuery);
+
+      // Map through the categories and retrieve tasks for each category
+      const categoriesArray = categorySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      categories.value = categoriesArray;
+
+      // Initialize an array to store all tasks
+      const allTasks = [];
+
+      // Fetch tasks for each category
+      for (const category of categoriesArray) {
+        console.warn("CategoryId => " + JSON.stringify(category))
+        const tasksCollectionRef = collection(db, `categories/${category.name}/tasks`);
+        const tasksSnapshot = await getDocs(tasksCollectionRef);
+
+        tasksSnapshot.forEach((taskDoc) => {
+          allTasks.push({
+            id: taskDoc.id,
+            ...taskDoc.data(),
+            category: category.name, // Associate task with its category name
+          });
+        });
+      }
+
+      tasks.value = allTasks;
     };
 
+    // Add a new task under a specific category
     const addTaskToFirestore = async () => {
-      await addDoc(collection(db, 'tasks'), { ...newTask.value, userId: user.value.uid });
-      fetchTasks();
+      const categoryDocRef = doc(db, 'categories', newTask.value.category);
+      const tasksCollectionRef = collection(categoryDocRef, 'tasks');
+
+      // Add the new task to Firestore and capture the reference
+      const taskDocRef = await addDoc(tasksCollectionRef, {
+        name: newTask.value.name,
+        description: newTask.value.description,
+        dueDate: newTask.value.dueDate,
+        priority: newTask.value.priority,
+        status: newTask.value.status,
+        userId: user.value.uid,
+        category: newTask.value.category,
+        taskId: newTask.value.taskId
+      });
+      newTask.value.id = taskDocRef.id;
+
+      fetchCategoriesAndTasks();
     };
 
     const updateTaskInFirestore = async () => {
-      const taskDoc = doc(db, 'tasks', newTask.value.id);
-      await updateDoc(taskDoc, { ...newTask.value });
-      fetchTasks();
-    };
+      console.warn("newTask.value.category => " + JSON.stringify(newTask.value))
+      const categoryDocRef = doc(db, 'categories', newTask.value.category);
+      const taskDocRef = doc(categoryDocRef, 'tasks', newTask.value.id);
 
-    const deleteTaskFromFirestore = async (taskId) => {
-      const taskDoc = doc(db, 'tasks', taskId);
-      await deleteDoc(taskDoc);
-      fetchTasks();
-    };
-
-    onMounted(() => {
-      if (!user.value) {
-        loginUser();
+      if (newTask.value.id) {
+        await updateDoc(taskDocRef, {
+          name: newTask.value.name,
+          description: newTask.value.description,
+          dueDate: newTask.value.dueDate,
+          priority: newTask.value.priority,
+          status: newTask.value.status,
+          userId: user.value.uid,
+          category: newTask.value.category,
+          taskId: newTask.value.taskId
+        });
+        fetchCategoriesAndTasks();
       } else {
-        fetchTasks();
+        console.error("No valid document ID found for the task update.");
+      }
+    };
+
+    const deleteTaskFromFirestore = async (taskId, category) => {
+      try {
+        const categoryDocRef = doc(db, 'categories', category);
+        const taskDocRef = doc(categoryDocRef, 'tasks', taskId);
+        await deleteDoc(taskDocRef);
+        fetchCategoriesAndTasks();
+      } catch (error) {
+        console.error("Error deleting task:", error);
+      }
+    };
+
+    onMounted(async () => {
+      if (!user.value) {
+        await loginUser();
+      } else {
+        await fetchCategoriesAndTasks();
+        console.log("Fetched tasks:", tasks.value); // Check tasks in the console
         isLoading.value = false;
       }
     });
@@ -238,9 +298,11 @@ export default {
       resetForm();
     };
 
-    const addCategory = () => {
-      if (!categories.value.includes(newCategory.value)) {
-        categories.value.push(newCategory.value);
+    const addCategory = async () => {
+      if (!categories.value.find(cat => cat.name === newCategory.value)) {
+        const categoryRef = doc(collection(db, 'categories'), newCategory.value);
+        await setDoc(categoryRef, { name: newCategory.value, userId: user.value.uid });
+        fetchCategoriesAndTasks();
         newCategory.value = '';
         showCategoryForm.value = false;
       } else {
@@ -260,7 +322,7 @@ export default {
     };
 
     const confirmDeleteTask = () => {
-      deleteTaskFromFirestore(taskToDelete.value.id);
+      deleteTaskFromFirestore(taskToDelete.value.id, taskToDelete.value.category);
       showDeleteConfirmPopup.value = false;
       showSuccessPopup.value = true;
       taskToDelete.value = null;
@@ -284,7 +346,8 @@ export default {
     });
 
     const tasksByCategory = (category) => {
-      return filteredTasks.value.filter((task) => task.category === category);
+      console.warn("Category =>" + JSON.stringify(tasks.value))
+      return filteredTasks.value.filter((task) => task.category == category);
     };
 
     return {
@@ -329,7 +392,8 @@ export default {
   margin-bottom: 20px;
 }
 
-.add-task-btn, .add-category-btn {
+.add-task-btn,
+.add-category-btn {
   padding: 10px 20px;
   border: none;
   border-radius: 5px;
@@ -380,7 +444,9 @@ label {
   margin-bottom: 5px;
 }
 
-input, textarea, select {
+input,
+textarea,
+select {
   width: 100%;
   padding: 8px;
   border: 1px solid #ccc;
@@ -396,7 +462,10 @@ textarea {
   justify-content: space-between;
 }
 
-.submit-btn, .cancel-btn, .close-btn, .delete-btn {
+.submit-btn,
+.cancel-btn,
+.close-btn,
+.delete-btn {
   padding: 10px 20px;
   border: none;
   border-radius: 5px;
@@ -409,7 +478,8 @@ textarea {
   color: white;
 }
 
-.cancel-btn, .close-btn {
+.cancel-btn,
+.close-btn {
   background-color: #ff5252;
   color: white;
 }
@@ -444,5 +514,77 @@ textarea {
 .task-item {
   min-width: 250px;
   flex-shrink: 0;
+}
+
+
+.no-arrows::-webkit-inner-spin-button,
+.no-arrows::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.no-arrows {
+  -moz-appearance: textfield;
+}
+
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 10px;
+  }
+
+  .tasks-list {
+    flex-direction: column;
+  }
+
+  .task-item {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .modal-content {
+    width: 100%;
+    padding: 15px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .submit-btn,
+  .cancel-btn,
+  .close-btn,
+  .delete-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .add-task-btn,
+  .add-category-btn {
+    font-size: 14px;
+    padding: 8px 15px;
+  }
+
+  .category-section h2 {
+    font-size: 18px;
+  }
+
+  .submit-btn,
+  .cancel-btn,
+  .close-btn,
+  .delete-btn {
+    padding: 8px 15px;
+  }
 }
 </style>
