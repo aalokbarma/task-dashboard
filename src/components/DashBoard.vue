@@ -239,26 +239,55 @@ export default {
 
     const updateTaskInFirestore = async () => {
       console.warn("newTask.value.category => " + JSON.stringify(newTask.value))
-      const categoryDocRef = doc(db, 'categories', newTask.value.category);
-      const taskDocRef = doc(categoryDocRef, 'tasks', newTask.value.id);
+      const { id, category, name, description, dueDate, priority, status, userId, taskId } = newTask.value;
 
-      if (newTask.value.id) {
-        await updateDoc(taskDocRef, {
-          name: newTask.value.name,
-          description: newTask.value.description,
-          dueDate: newTask.value.dueDate,
-          priority: newTask.value.priority,
-          status: newTask.value.status,
-          userId: user.value.uid,
-          category: newTask.value.category,
-          taskId: newTask.value.taskId
-        });
-        fetchCategoriesAndTasks();
-      } else {
+      if (!id) {
         console.error("No valid document ID found for the task update.");
+        return;
+      }
+
+      const originalTask = tasks.value.find(task => task.id === id);
+      const originalCategory = originalTask?.category;
+
+      try {
+        if (originalCategory && originalCategory !== category) {
+          const newCategoryDocRef = doc(db, 'categories', category);
+          const newTasksCollectionRef = collection(newCategoryDocRef, 'tasks');
+
+          await addDoc(newTasksCollectionRef, {
+            name,
+            description,
+            dueDate,
+            priority,
+            status,
+            userId,
+            category,
+            taskId
+          });
+
+          const oldCategoryDocRef = doc(db, 'categories', originalCategory);
+          const oldTaskDocRef = doc(oldCategoryDocRef, 'tasks', id);
+          await deleteDoc(oldTaskDocRef);
+        } else {
+          const categoryDocRef = doc(db, 'categories', category);
+          const taskDocRef = doc(categoryDocRef, 'tasks', id);
+          await updateDoc(taskDocRef, {
+            name,
+            description,
+            dueDate,
+            priority,
+            status,
+            userId,
+            category,
+            taskId
+          });
+        }
+
+        fetchCategoriesAndTasks();
+      } catch (error) {
+        console.error("Error updating task:", error);
       }
     };
-
     const deleteTaskFromFirestore = async (taskId, category) => {
       try {
         const categoryDocRef = doc(db, 'categories', category);
