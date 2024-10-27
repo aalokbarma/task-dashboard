@@ -1,17 +1,12 @@
 <template>
   <div v-if="isLoading">Loading...</div>
   <div v-else class="dashboard-container">
-    <!-- Header with Add Task and Create Category Buttons -->
     <div class="dashboard-header">
       <h1>Task Dashboard</h1>
       <button @click="openTaskForm" class="add-task-btn">Add Task</button>
       <button @click="showCategoryForm = true" class="add-category-btn">Create Category</button>
     </div>
-  
-    <!-- Task Filter Component -->
     <TaskFilter @filter="handleFilter" />
-  
-    <!-- No Categories Popup -->
     <div v-if="showNoCategoriesPopup" class="modal-overlay">
       <div class="modal-content">
         <h2>No Categories Available</h2>
@@ -19,8 +14,6 @@
         <button @click="showNoCategoriesPopup = false" class="close-btn">Close</button>
       </div>
     </div>
-  
-    <!-- Delete Confirmation Popup -->
     <div v-if="showDeleteConfirmPopup" class="modal-overlay">
       <div class="modal-content">
         <h2>Confirm Deletion</h2>
@@ -31,8 +24,6 @@
         </div>
       </div>
     </div>
-  
-    <!-- Success Message Popup -->
     <div v-if="showSuccessPopup" class="modal-overlay">
       <div class="modal-content">
         <h2>Success</h2>
@@ -40,13 +31,9 @@
         <button @click="showSuccessPopup = false" class="close-btn">OK</button>
       </div>
     </div>
-  
-    <!-- No tasks message if no tasks exist in any category -->
     <div v-if="filteredTasks?.length === 0" class="no-tasks-message">
       <p>Currently, there are no tasks matching the criteria.</p>
     </div>
-  
-    <!-- Tasks Organized by Category -->
     <div v-else class="tasks-by-category">
       <div v-for="category in categories" :key="category.id" class="category-section">
         <h2>{{ category.name }}</h2>
@@ -59,8 +46,6 @@
         </div>
       </div>
     </div>
-  
-    <!-- Task Form Popup -->
     <div v-if="showTaskForm" class="modal-overlay">
       <div class="modal-content form-content">
         <h2>{{ isEditMode ? 'Edit Task' : 'Create Task' }}</h2>
@@ -112,8 +97,6 @@
         </form>
       </div>
     </div>
-  
-    <!-- Create Category Popup -->
     <div v-if="showCategoryForm" class="modal-overlay">
       <div class="modal-content form-content">
         <h2>Create Category</h2>
@@ -170,7 +153,6 @@ export default {
     const taskToDelete = ref(null);
     const filterCriteria = ref({ status: '', query: '' });
 
-    // Log in the user using Google Auth
     const loginUser = async () => {
       try {
         const result = await signInWithPopup(auth, provider);
@@ -183,24 +165,14 @@ export default {
       }
     };
 
-    // Fetch categories and tasks for the logged-in user
     const fetchCategoriesAndTasks = async () => {
       if (!user.value) return;
-
-      // Fetch categories for the logged-in user
       const categoryQuery = query(collection(db, 'categories'), where('userId', '==', user.value.uid));
       const categorySnapshot = await getDocs(categoryQuery);
-
-      // Map through the categories and retrieve tasks for each category
       const categoriesArray = categorySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       categories.value = categoriesArray;
-
-      // Initialize an array to store all tasks
       const allTasks = [];
-
-      // Fetch tasks for each category
       for (const category of categoriesArray) {
-        console.warn("CategoryId => " + JSON.stringify(category))
         const tasksCollectionRef = collection(db, `categories/${category.name}/tasks`);
         const tasksSnapshot = await getDocs(tasksCollectionRef);
 
@@ -208,7 +180,7 @@ export default {
           allTasks.push({
             id: taskDoc.id,
             ...taskDoc.data(),
-            category: category.name, // Associate task with its category name
+            category: category.name,
           });
         });
       }
@@ -216,12 +188,9 @@ export default {
       tasks.value = allTasks;
     };
 
-    // Add a new task under a specific category
     const addTaskToFirestore = async () => {
       const categoryDocRef = doc(db, 'categories', newTask.value.category);
       const tasksCollectionRef = collection(categoryDocRef, 'tasks');
-
-      // Add the new task to Firestore and capture the reference
       const taskDocRef = await addDoc(tasksCollectionRef, {
         name: newTask.value.name,
         description: newTask.value.description,
@@ -233,27 +202,22 @@ export default {
         taskId: newTask.value.taskId
       });
       newTask.value.id = taskDocRef.id;
-
       fetchCategoriesAndTasks();
     };
 
     const updateTaskInFirestore = async () => {
-      console.warn("newTask.value.category => " + JSON.stringify(newTask.value))
       const { id, category, name, description, dueDate, priority, status, userId, taskId } = newTask.value;
 
       if (!id) {
         console.error("No valid document ID found for the task update.");
         return;
       }
-
       const originalTask = tasks.value.find(task => task.id === id);
       const originalCategory = originalTask?.category;
-
       try {
         if (originalCategory && originalCategory !== category) {
           const newCategoryDocRef = doc(db, 'categories', category);
           const newTasksCollectionRef = collection(newCategoryDocRef, 'tasks');
-
           await addDoc(newTasksCollectionRef, {
             name,
             description,
@@ -264,7 +228,6 @@ export default {
             category,
             taskId
           });
-
           const oldCategoryDocRef = doc(db, 'categories', originalCategory);
           const oldTaskDocRef = doc(oldCategoryDocRef, 'tasks', id);
           await deleteDoc(oldTaskDocRef);
@@ -282,7 +245,6 @@ export default {
             taskId
           });
         }
-
         fetchCategoriesAndTasks();
       } catch (error) {
         console.error("Error updating task:", error);
@@ -304,7 +266,6 @@ export default {
         await loginUser();
       } else {
         await fetchCategoriesAndTasks();
-        console.log("Fetched tasks:", tasks.value); // Check tasks in the console
         isLoading.value = false;
       }
     });
@@ -375,7 +336,6 @@ export default {
     });
 
     const tasksByCategory = (category) => {
-      console.warn("Category =>" + JSON.stringify(tasks.value))
       return filteredTasks.value.filter((task) => task.category == category);
     };
 
@@ -407,7 +367,6 @@ export default {
 </script>
 
 <style scoped>
-/* General Styles */
 .dashboard-container {
   max-width: 1000px;
   margin: 0 auto;
@@ -440,7 +399,6 @@ export default {
   color: white;
 }
 
-/* Modal and Form Styling */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -518,7 +476,6 @@ textarea {
   color: white;
 }
 
-/* Category Sections */
 .tasks-by-category {
   margin-top: 20px;
 }

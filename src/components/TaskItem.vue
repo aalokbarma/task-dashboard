@@ -7,7 +7,7 @@
     <p><strong>Due Date:</strong> {{ task.dueDate }}</p>
     <p><strong>Priority:</strong> {{ task.priority }}</p>
     <p><strong>Status:</strong> {{ task.status }}</p>
-
+  
     <!-- Three Dots Menu Button -->
     <div class="menu-wrapper">
       <button class="menu-btn" @click="toggleMenu">⋮</button>
@@ -29,20 +29,20 @@ export default {
   },
   data() {
     return {
-      showMenu: false // Controls visibility of the popup menu
+      showMenu: false
     };
   },
   methods: {
     toggleMenu() {
-      this.showMenu = !this.showMenu; // Toggle menu visibility
+      this.showMenu = !this.showMenu;
     },
     editTask() {
-      this.$emit('edit', this.task); // Emit event to the parent to edit the task
-      this.showMenu = false; // Hide the menu after click
+      this.$emit('edit', this.task);
+      this.showMenu = false;
     },
     deleteTask() {
-      this.$emit('delete', this.task); // Emit event to the parent to delete the task
-      this.showMenu = false; // Hide the menu after click
+      this.$emit('delete', this.task);
+      this.showMenu = false;
     }
   }
 };
