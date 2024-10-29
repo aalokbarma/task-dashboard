@@ -7,7 +7,7 @@
       class="search-input"
     />
     <select v-model="statusFilter" @change="applyFilter" class="status-select">
-      <option value="">All Statuses</option>
+      <option value="">All Status</option>
       <option value="To-do">To-do</option>
       <option value="In Progress">In Progress</option>
       <option value="Done">Done</option>

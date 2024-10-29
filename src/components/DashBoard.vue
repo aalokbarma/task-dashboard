@@ -51,24 +51,24 @@
         <h2>{{ isEditMode ? 'Edit Task' : 'Create Task' }}</h2>
         <form @submit.prevent="submitTask">
           <div class="form-group">
-            <label for="task-id">Task ID</label>
+            <label for="task-id">Task ID (Only accept number):</label>
             <input id="task-id" v-model.number="newTask.taskId" type="number" :disabled="isEditMode" required
               class="no-arrows" />
           </div>
           <div class="form-group">
-            <label for="task-name">Name</label>
+            <label for="task-name">Name:</label>
             <input id="task-name" v-model="newTask.name" type="text" required />
           </div>
           <div class="form-group">
-            <label for="description">Description</label>
+            <label for="description">Description:</label>
             <textarea id="description" v-model="newTask.description" required></textarea>
           </div>
           <div class="form-group">
-            <label for="due-date">Due Date</label>
+            <label for="due-date">Due Date:</label>
             <input id="due-date" v-model="newTask.dueDate" type="date" required />
           </div>
           <div class="form-group">
-            <label for="priority">Priority</label>
+            <label for="priority">Priority:</label>
             <select id="priority" v-model="newTask.priority" required>
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
@@ -76,7 +76,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="status">Status</label>
+            <label for="status">Status:</label>
             <select id="status" v-model="newTask.status" required>
               <option value="To-do">To-do</option>
               <option value="In Progress">In Progress</option>
@@ -84,7 +84,7 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="category">Category</label>
+            <label for="category">Category:</label>
             <select id="category" v-model="newTask.category" required>
               <option v-for="category in categories" :key="category.id" :value="category.name">{{ category.name }}
               </option>
@@ -262,9 +262,10 @@ export default {
     };
 
     onMounted(async () => {
-      if (!user.value) {
-        await loginUser();
-      } else {
+      const userData = localStorage.getItem("UserData");
+      const updatedUserData = JSON.parse(userData)
+      if (updatedUserData) {
+        user.value = updatedUserData;
         await fetchCategoriesAndTasks();
         isLoading.value = false;
       }
@@ -330,7 +331,7 @@ export default {
     const filteredTasks = computed(() => {
       return tasks.value.filter((task) => {
         const matchesStatus = !filterCriteria.value.status || task.status === filterCriteria.value.status;
-        const matchesQuery = !filterCriteria.value.query || task.name.toLowerCase().includes(filterCriteria.value.query.toLowerCase()) || task.id.toLowerCase().includes(filterCriteria.value.query.toLowerCase());
+        const matchesQuery = !filterCriteria.value.query || task.name.toLowerCase().includes(filterCriteria.value.query.toLowerCase()) || String(task.taskId).toLowerCase().includes(filterCriteria.value.query.toLowerCase());
         return matchesStatus && matchesQuery;
       });
     });
@@ -362,6 +363,13 @@ export default {
       confirmDeleteTask,
       handleFilter,
     };
+  },
+  async mounted() {
+    let userData = localStorage.getItem("UserData");
+    const updatedUserData = JSON.parse(userData)
+    if (!updatedUserData) {
+      this.$router.push("/login")
+    }
   },
 };
 </script>
@@ -423,6 +431,10 @@ export default {
 
 .form-group {
   margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 label {
@@ -432,7 +444,13 @@ label {
 }
 
 input,
-textarea,
+textarea{
+  width: 95%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
 select {
   width: 100%;
   padding: 8px;

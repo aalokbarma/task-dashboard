@@ -28,6 +28,7 @@ export default {
         const result = await signInWithPopup(auth, provider);
         console.log('User logged in:', result.user);
         router.push({ name: "Dashboard" });
+        localStorage.setItem("UserData", JSON.stringify(result.user))
       } catch (error) {
         errorMessage.value = 'Failed to log in with Google';
         console.error('Google login error:', error);
@@ -38,7 +39,14 @@ export default {
       loginWithGoogle,
       errorMessage
     };
-  }
+  },
+  async mounted() {
+    let userData = localStorage.getItem("UserData");
+    const updatedUserData = JSON.parse(userData)
+      if(updatedUserData){
+        this.$router.push("/")
+      }
+  },
 };
 </script>
 
